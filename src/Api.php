@@ -26,6 +26,7 @@ use Freshdesk\Resources\Forum;
 use Freshdesk\Resources\Group;
 use Freshdesk\Resources\Product;
 use Freshdesk\Resources\SLAPolicy;
+use Freshdesk\Resources\Solution;
 use Freshdesk\Resources\Ticket;
 use Freshdesk\Resources\TimeEntry;
 use Freshdesk\Resources\Topic;
@@ -44,126 +45,12 @@ use GuzzleHttp\Exception\RequestException;
 class Api
 {
     /**
-     * Agent resources
+     * Solution resource
      *
      * @api
-     * @var Agent
+     * @var Solution
      */
-    public $agents;
-
-    /**
-     * Company resources
-     *
-     * @api
-     * @var Company
-     */
-    public $companies;
-
-    /**
-     * Contact resources
-     *
-     * @api
-     * @var Contact
-     */
-    public $contacts;
-
-    /**
-     * Group resources
-     *
-     * @api
-     * @var Group
-     */
-    public $groups;
-
-    /**
-     * Ticket resources
-     *
-     * @api
-     * @var Ticket
-     */
-    public $tickets;
-
-    /**
-     * TimeEntry resources
-     *
-     * @api
-     * @var TimeEntry
-     */
-    public $timeEntries;
-
-    /**
-     * Conversation resources
-     *
-     * @api
-     * @var Conversation
-     */
-    public $conversations;
-
-    /**
-     * Category resources
-     *
-     * @api
-     * @var Category
-     */
-    public $categories;
-
-    /**
-     * Forum resources
-     *
-     * @api
-     * @var Forum
-     */
-    public $forums;
-
-    /**
-     * Topic resources
-     *
-     * @api
-     * @var Topic
-     */
-    public $topics;
-
-    /**
-     * Comment resources
-     *
-     * @api
-     * @var Comment
-     */
-    public $comments;
-
-    //Admin
-
-    /**
-     * Email Config resources
-     *
-     * @api
-     * @var EmailConfig
-     */
-    public $emailConfigs;
-
-    /**
-     * Access Product resources
-     *
-     * @api
-     * @var Product
-     */
-    public $products;
-
-    /**
-     * Business Hours resources
-     *
-     * @api
-     * @var BusinessHour
-     */
-    public $businessHours;
-
-    /**
-     * SLA Policy resources
-     *
-     * @api
-     * @var SLAPolicy
-     */
-    public $slaPolicies;
+    public $solutions;
 
     /**
      * @internal
@@ -214,7 +101,7 @@ class Api
      * @throws RateLimitExceededException
      * @throws UnsupportedContentTypeException
      */
-    public function request($method, $endpoint, array $data = null, array $query = null)
+    public function request($method, $endpoint, array $data = null, $query = null, $id = null)
     {
         $options = ['json' => $data];
 
@@ -224,7 +111,7 @@ class Api
 
         $url = $this->baseUrl . $endpoint;
 
-        return $this->performRequest($method, $url, $options);
+        return $this->performRequest($method, $url, $options, $id);
     }
 
     /**
@@ -241,12 +128,12 @@ class Api
      * @throws AuthenticationException
      * @throws ConflictingStateException
      */
-    private function performRequest($method, $url, $options) {
-
+    private function performRequest($method, $url, $options, $id = null) {
         try {
             switch ($method) {
                 case 'GET':
-                    return json_decode($this->client->get($url, $options)->getBody(), true);
+
+                    return $this->checkForPages($url,$options,$id);
                 case 'POST':
                     return json_decode($this->client->post($url, $options)->getBody(), true);
                 case 'PUT':
@@ -259,6 +146,41 @@ class Api
         } catch (RequestException $e) {
             throw ApiException::create($e);
         }
+    }
+
+    private function checkForPages($url,$options,$id = null){
+        if($this->client->get($url,$options)->hasHeader('link'))
+        {
+            $array = json_decode($this->
+            client->
+            get($url, $options)->
+            getBody(), true);
+
+            $newUrl = ($this->client->get($url, $options)->getHeader('link'));
+            $newUrl = preg_replace('/[<>; ]/s', '', $newUrl);
+            $newUrl = str_replace('rel="next"','',$newUrl);
+
+            $mergedArray = array_merge(
+                $array ,
+                $this->checkForPages($newUrl[0],$options,$id));
+        }
+        else {
+            $mergedArray = json_decode($this
+                ->client
+                ->get($url, $options)
+                ->getBody(), true);
+
+            if ($id)
+            {
+                $newArray = array();
+                foreach ($mergedArray as $item) {
+                    $item['category_id'] = $id;
+                    array_push($newArray,$item);
+                }
+                $mergedArray = $newArray;
+            }
+        }
+        return $mergedArray;
     }
 
 
@@ -285,27 +207,7 @@ class Api
      */
     private function setupResources()
     {
-        //People
-        $this->agents = new Agent($this);
-        $this->companies = new Company($this);
-        $this->contacts = new Contact($this);
-        $this->groups = new Group($this);
-
-        //Tickets
-        $this->tickets = new Ticket($this);
-        $this->timeEntries = new TimeEntry($this);
-        $this->conversations = new Conversation($this);
-
-        //Discussions
-        $this->categories = new Category($this);
-        $this->forums = new Forum($this);
-        $this->topics = new Topic($this);
-        $this->comments = new Comment($this);
-
-        //Admin
-        $this->products = new Product($this);
-        $this->emailConfigs = new EmailConfig($this);
-        $this->slaPolicies = new SLAPolicy($this);
-        $this->businessHours = new BusinessHour($this);
+        //Solutions
+        $this->solutions = new Solution($this);
     }
 }
